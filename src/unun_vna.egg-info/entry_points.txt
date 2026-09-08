@@ -1,0 +1,2 @@
+[console_scripts]
+unun-vna = unun_vna.cli:main
