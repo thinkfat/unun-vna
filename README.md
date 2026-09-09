@@ -1,4 +1,4 @@
-# unun-vna 0.5.0
+# unun-vna 0.5.1
 
 `unun-vna` is a command-line tool for measuring the **small-signal efficiency**
 of HF UnUn transformers with an S-A-A-2 / NanoVNA V2 using the
@@ -193,7 +193,33 @@ and
 L_\text{dB}=-10\log_{10}(\eta).
 \]
 
-There is no `N` in this equation. That is intentional.
+### VSWR
+
+The analysis also reports Port-1 VSWR derived directly from calibrated S11.
+With
+
+\[
+\rho = |S_{11}|,
+\]
+
+\[
+\boxed{
+\mathrm{VSWR}=\frac{1+\rho}{1-\rho}
+}
+\]
+
+for \(\rho<1\).
+
+A perfect match gives VSWR = 1.0. Total reflection gives infinite VSWR.
+Values with \(|S_{11}|\ge 1\), which can arise from residual calibration or
+measurement error, are reported as infinite rather than as a non-physical
+negative VSWR.
+
+The tool also reports the **ideal lossless VSWR** for the configured
+transformer ratio with the actually measured fixture. This helps separate
+load mismatch from transformer loss.
+
+There is no `N` in the measured efficiency equation. That is intentional.
 
 The measured power flow already contains the transformer's actual behaviour;
 the ratio is not needed to reconstruct efficiency.
@@ -416,6 +442,7 @@ The analysis CSV contains:
 ```text
 frequency_hz
 s11_db
+vswr
 s21_db
 fixture_r_ohm
 fixture_x_ohm
@@ -423,6 +450,7 @@ impedance_ratio_high_over_low
 target_high_side_resistance_ohm
 target_series_resistance_ohm
 ideal_lossless_s11_db_for_measured_fixture
+ideal_lossless_vswr_for_measured_fixture
 ideal_lossless_s21_db_for_measured_fixture
 accepted_fraction
 delivered_fraction

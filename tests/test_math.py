@@ -13,6 +13,7 @@ from unun_vna.analysis import (
     ideal_transformer_reference,
     series_fixture_impedance,
     unun_efficiency,
+    vswr_from_s11,
 )
 
 
@@ -107,6 +108,20 @@ class MathTests(unittest.TestCase):
         )
 
         self.assertAlmostEqual(result["efficiency"][0], expected, places=15)
+
+    def test_vswr_perfect_match(self):
+        """S11=0 must give VSWR=1."""
+        self.assertAlmostEqual(vswr_from_s11(np.array([0j]))[0], 1.0, places=12)
+
+    def test_vswr_known_reflection(self):
+        """|Gamma|=1/3 gives VSWR=2."""
+        self.assertAlmostEqual(
+            vswr_from_s11(np.array([1 / 3 + 0j]))[0], 2.0, places=12
+        )
+
+    def test_vswr_total_reflection(self):
+        """|Gamma|=1 gives infinite VSWR."""
+        self.assertTrue(np.isinf(vswr_from_s11(np.array([1 + 0j]))[0]))
 
 
 if __name__ == "__main__":

@@ -54,6 +54,7 @@ from .analysis import (
     ideal_transformer_reference,
     series_fixture_impedance,
     unun_efficiency,
+    vswr_from_s11,
 )
 
 
@@ -889,6 +890,13 @@ def cmd_analyze(a):
     ideal_s11 = ideal_ref["gamma_in"]
     ideal_s21_mag = ideal_ref["s21_magnitude"]
 
+    # VSWR is a direct re-expression of the calibrated Port-1 reflection.
+    # The ideal-reference VSWR shows the load mismatch that a lossless
+    # transformer of the configured ratio would have with the actually
+    # measured fixture.
+    vswr = vswr_from_s11(s11)
+    ideal_vswr = vswr_from_s11(ideal_s11)
+
     # Write the full frequency-resolved result.  The complex fixture impedance
     # is included so every efficiency point can be audited later.
     out = Path(a.output)
@@ -898,6 +906,7 @@ def cmd_analyze(a):
             [
                 "frequency_hz",
                 "s11_db",
+                "vswr",
                 "s21_db",
                 "fixture_r_ohm",
                 "fixture_x_ohm",
@@ -905,6 +914,7 @@ def cmd_analyze(a):
                 "target_high_side_resistance_ohm",
                 "target_series_resistance_ohm",
                 "ideal_lossless_s11_db_for_measured_fixture",
+                "ideal_lossless_vswr_for_measured_fixture",
                 "ideal_lossless_s21_db_for_measured_fixture",
                 "accepted_fraction",
                 "delivered_fraction",
@@ -918,6 +928,7 @@ def cmd_analyze(a):
                 [
                     int(round(f_dut[i])),
                     db20(s11[i]),
+                    vswr[i],
                     db20(s21[i]),
                     z_series[i].real,
                     z_series[i].imag,
@@ -925,6 +936,7 @@ def cmd_analyze(a):
                     ideal_ref["target_high_side_resistance"],
                     ideal_ref["target_series_resistance"],
                     db20(ideal_s11[i]),
+                    ideal_vswr[i],
                     db20(ideal_s21_mag[i]),
                     result["accepted_fraction"][i],
                     result["delivered_fraction"][i],
@@ -948,8 +960,8 @@ def cmd_analyze(a):
 
     print("\nSelected frequencies:")
     print(
-        " frequency     S11       S21       ideal S11/S21      fixture Zs"
-        "             efficiency   loss"
+        " frequency     S11      VSWR      S21       ideal S11/VSWR/S21"
+        "            fixture Zs             efficiency   loss"
     )
 
     # Interpolate only for compact reporting at convenient band frequencies.
@@ -960,13 +972,16 @@ def cmd_analyze(a):
         zz = interp_complex(f_dut, z_series, target)
         ee = interp_real(f_dut, eta, target)
         ll = interp_real(f_dut, loss_db, target)
+        vv = interp_real(f_dut, vswr, target)
         i11 = interp_complex(f_dut, ideal_s11, target)
+        iv = interp_real(f_dut, ideal_vswr, target)
         i21 = interp_real(f_dut, ideal_s21_mag, target)
         print(
             f" {target/1e6:7.3f} MHz  "
             f"{db20(v11):7.2f} dB  "
+            f"{vv:7.3f}  "
             f"{db20(v21):7.2f} dB  "
-            f"{db20(i11):7.2f}/{db20(i21):7.2f} dB  "
+            f"{db20(i11):7.2f}/{iv:6.3f}/{db20(i21):7.2f} dB  "
             f"{zz.real:7.1f}{zz.imag:+7.1f}j ohm  "
             f"{ee*100:7.2f} %   {ll:6.3f} dB"
         )

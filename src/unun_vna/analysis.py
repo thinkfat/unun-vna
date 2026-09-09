@@ -31,6 +31,26 @@ from __future__ import annotations
 import numpy as np
 
 
+def vswr_from_s11(s11):
+    """Convert complex S11 values to voltage standing-wave ratio (VSWR).
+
+    For reflection-coefficient magnitude ``rho = |S11|``,
+
+        VSWR = (1 + rho) / (1 - rho).
+
+    A perfect match has VSWR = 1.0. Total reflection (rho = 1) gives infinite
+    VSWR. Values with rho > 1 can occur because of residual calibration/noise
+    error; these are also returned as infinity instead of a non-physical
+    negative VSWR.
+    """
+    rho = np.abs(np.asarray(s11, dtype=complex))
+    out = np.full_like(rho, np.inf, dtype=float)
+    valid = rho < 1.0
+    out[valid] = (1.0 + rho[valid]) / (1.0 - rho[valid])
+    return out
+
+
+
 def series_fixture_impedance(s11, s21, z0: float = 50.0):
     """Extract the complex series impedance of the resistor fixture.
 
