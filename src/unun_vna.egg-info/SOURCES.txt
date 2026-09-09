@@ -9,4 +9,5 @@ src/unun_vna.egg-info/dependency_links.txt
 src/unun_vna.egg-info/entry_points.txt
 src/unun_vna.egg-info/requires.txt
 src/unun_vna.egg-info/top_level.txt
+tests/test_calibration.py
 tests/test_math.py

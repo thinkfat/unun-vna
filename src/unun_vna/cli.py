@@ -19,10 +19,11 @@ calibration coefficients.
 Important architectural limitation
 ----------------------------------
 The S-A-A-2 is a T/R VNA: we measure S11 and forward S21, but not the complete
-four-S-parameter set of a bidirectional 2-port VNA.  The calibration implemented
-here removes the dominant reflection/directivity/tracking errors and normalizes
-the forward transmission using a THRU, but it cannot perform a full independent
-Port-2 load-match correction.
+four-S-parameter set of a bidirectional 2-port VNA.  The host calibration mirrors
+the NanoVNA V2 enhanced-response user-calibration path: SOL reflection correction,
+SHORT/OPEN leakage removal, THRU normalization using the THRU's own reflection
+state, and Port-1 source-match loop-gain correction.  It still cannot perform a
+full independent Port-2 load-match correction.
 
 That limitation matters because the one-transformer method often presents a
 very high impedance when viewed from Port 2.  The recommended measurement setup
@@ -243,105 +244,158 @@ def capture(v, title, text, start, stop, points):
     return f, s11, s21
 
 
-def compute_cal(short11, open11, load11, open21, load21, thru21):
-    """Derive host-side S-A-A-2 T/R calibration coefficients.
+def _apply_reflection_cal(raw11, e00, e11, etrack):
+    """Apply the three-term SOL reflection calibration to raw S11.
+
+    The host receives the S-A-A-2 reflection channel after its internal e-cal,
+    but before user SOL calibration.  This is the same quantity used by the
+    NanoVNA V2 on-screen user-calibration code.
+    """
+    u = raw11 - e00
+    den = etrack + e11 * u
+    if np.any(np.abs(den) < 1e-15):
+        raise RuntimeError("Singular reflection calibration")
+    return u / den
+
+
+def _source_match_gain(s11, e11):
+    """Return the NanoVNA V2 enhanced-response source-match loop gain.
+
+    The firmware calls this quantity ``SOL_compute_thru_gain`` and computes
+
+        gain = 1 / (1 - e11*S11)
+
+    where S11 is already SOL-calibrated.  It describes the signal-flow loop
+    between the source-match error of Port 1 and a reflecting DUT.
+    """
+    den = 1.0 - e11 * s11
+    if np.any(np.abs(den) < 1e-15):
+        raise RuntimeError("Singular enhanced-response source-match correction")
+    return 1.0 / den
+
+
+def compute_cal(short11, short21, open11, open21, load11, thru11, thru21):
+    """Derive the S-A-A-2/NanoVNA V2 enhanced-response T/R calibration.
+
+    This follows the on-screen NanoVNA V2 user-calibration algorithm rather
+    than the simpler T/R normalization previously used by this tool.
 
     Reflection channel
     ------------------
-    S11 uses the standard three-term one-port error model:
+    S11 uses the standard three-term one-port error model::
 
-        m = e00 + etrack * Γ / (1 - e11 * Γ)
+        m = e00 + etrack*Gamma / (1 - e11*Gamma)
 
-    where
+    where ``e00`` is directivity, ``etrack`` is reflection tracking and
+    ``e11`` is source match.  SHORT, OPEN and LOAD solve these terms at every
+    frequency.
 
-    * ``m``      is the raw measured reflection,
-    * ``Γ``      is the actual DUT reflection coefficient,
-    * ``e00``    is directivity,
-    * ``etrack`` is reflection tracking (e10*e01),
-    * ``e11``    is source match.
-
-    With ideal LOAD (Γ=0), OPEN (Γ=+1) and SHORT (Γ=-1), those three unknown
-    coefficient arrays can be solved independently at every frequency.
-
-    Transmission channel
+    Transmission leakage
     --------------------
-    The S-A-A-2 is a T/R instrument, so the forward measurement is handled as an
-    enhanced-response calibration rather than a full 12-term bidirectional
-    2-port calibration.
+    NanoVNA V2 models forward leakage as an affine function of the *raw*
+    reflection channel::
 
-    The OPEN and LOAD captures provide two different known reflection states on
-    Port 1.  Their S21 responses are used to model feed-through/leakage as an
-    affine function of the raw reflection channel:
+        leakage(raw_s11) = leak0 + leak_r*raw_s11
 
-        leakage(raw_s11) = leak0 + leak_r * raw_s11
+    The firmware derives this line from the SHORT and OPEN measurements.  Both
+    standards ideally have zero true S21, so their measured forward signal is
+    treated as leakage/feed-through.
 
-    A THRU measurement then supplies the forward tracking normalization.
+    THRU reference and enhanced response
+    ------------------------------------
+    The THRU capture must retain both raw S11 and raw S21.  During application
+    the THRU transmission is corrected using the THRU's own raw S11, and the
+    THRU reference is then scaled by the ratio of source-match loop gains for
+    the DUT and THRU.  This is crucial for highly reflecting DUTs such as the
+    high-value series fixtures used by the one-transformer method.
 
-    This removes the dominant transmission offset/leakage/tracking terms, but it
-    does *not* independently solve Port-2 load match.  That is why a fixed
-    attenuator in front of Port 2 is recommended for strongly reflecting DUTs.
+    Port-2 load match remains outside this T/R error model.  A fixed attenuator
+    at Port 2 is therefore still recommended and must remain in place for both
+    calibration and measurement.
     """
     # --- Reflection SOL calibration -----------------------------------------
-    # Ideal 50-ohm LOAD has Γ=0, hence its raw reading directly estimates e00.
     e00 = load11
-
-    # Remove directivity from the OPEN and SHORT measurements.
     A = open11 - e00
     B = short11 - e00
-
-    # Solving the Γ=+1 and Γ=-1 equations produces the source-match term.
     d = A - B
     if np.any(np.abs(d) < 1e-15):
         raise RuntimeError("Degenerate SOL calibration data")
     e11 = (A + B) / d
-
-    # Reflection tracking follows from the corrected OPEN equation.
     etrack = A * (1.0 - e11)
 
-    # --- Forward T/R calibration --------------------------------------------
-    # Model raw S21 leakage/feed-through as a linear function of raw S11.
-    # OPEN and LOAD give two points from which the slope/intercept are solved.
-    d2 = load11 - open11
+    # --- Forward leakage model ----------------------------------------------
+    # Match NanoVNA V2 firmware: use SHORT and OPEN, not LOAD and OPEN.
+    d2 = short11 - open11
     if np.any(np.abs(d2) < 1e-15):
         raise RuntimeError("Cannot derive T/R leakage model")
-    leak_r = (load21 - open21) / d2
+    leak_r = (short21 - open21) / d2
     leak0 = open21 - leak_r * open11
 
-    # The raw THRU transmission itself is retained as the forward reference.
-    return e00, e11, etrack, leak0, leak_r, thru21
+    return e00, e11, etrack, leak0, leak_r, thru11, thru21
 
 
-def apply_cal(raw11, raw21, e00, e11, etrack, leak0, leak_r, thru21):
-    """Apply the stored host-side calibration to one raw sweep.
+def apply_cal(
+    raw11,
+    raw21,
+    e00,
+    e11,
+    etrack,
+    leak0,
+    leak_r,
+    thru11,
+    thru21,
+):
+    """Apply NanoVNA V2 enhanced-response T/R calibration to one sweep.
 
-    S11 inversion
-    -------------
-    Starting from the three-term one-port error model, solving for the actual
-    reflection coefficient gives::
+    The sequence mirrors the on-screen firmware algorithm:
 
-        u   = raw11 - e00
-        S11 = u / (etrack + e11*u)
+    1. subtract DUT leakage using the DUT's raw S11;
+    2. SOL-calibrate DUT S11;
+    3. subtract THRU leakage using the THRU's *own* raw S11;
+    4. SOL-calibrate the stored THRU S11;
+    5. calculate source-match loop gains for DUT and THRU;
+    6. scale the THRU reference by ``dut_gain / thru_gain``;
+    7. divide corrected DUT transmission by that enhanced THRU reference.
 
-    S21 enhanced response
-    ---------------------
-    First estimate the leakage appropriate to the DUT's raw S11.  Subtract that
-    leakage from both the DUT transmission and the stored THRU transmission,
-    then divide by the corrected THRU:
+    Algebraically the final step is::
 
-        leak = leak0 + leak_r*raw11
-        S21  = (raw21 - leak) / (thru21 - leak)
+        dut_t  = raw21  - leakage(raw11)
+        thru_t = thru21 - leakage(thru11)
 
-    A perfect THRU therefore calibrates to approximately 1+0j.
+        G_dut  = 1 / (1 - e11*S11_dut)
+        G_thru = 1 / (1 - e11*S11_thru)
 
-    Again: this is not a complete load-match-corrected two-port calibration.
+        S21 = dut_t / (thru_t * G_dut/G_thru)
+
+    This corrects the Port-1 source-match interaction that becomes large when
+    |S11| is close to one.  It is still not a full bidirectional two-port
+    calibration, so a Port-2 pad remains useful for load-match suppression.
     """
-    # Correct Port-1 reflection.
-    u = raw11 - e00
-    s11 = u / (etrack + e11 * u)
+    # Calibrated DUT reflection.
+    s11 = _apply_reflection_cal(raw11, e00, e11, etrack)
 
-    # Correct forward transmission for estimated leakage and THRU tracking.
-    leak = leak0 + raw11 * leak_r
-    s21 = (raw21 - leak) / (thru21 - leak)
+    # Correct DUT and THRU transmission for leakage using their respective raw
+    # reflection states.
+    dut_leak = leak0 + raw11 * leak_r
+    thru_leak = leak0 + thru11 * leak_r
+    dut_t = raw21 - dut_leak
+    thru_t = thru21 - thru_leak
+
+    if np.any(np.abs(thru_t) < 1e-15):
+        raise RuntimeError("Singular THRU transmission reference")
+
+    # The THRU itself is not assumed to have exactly zero S11.  Its measured
+    # reflection is corrected with the same SOL terms and used as the reference
+    # state in the enhanced-response source-match correction.
+    thru_s11 = _apply_reflection_cal(thru11, e00, e11, etrack)
+    dut_gain = _source_match_gain(s11, e11)
+    thru_gain = _source_match_gain(thru_s11, e11)
+
+    enhanced_ref = thru_t * dut_gain / thru_gain
+    if np.any(np.abs(enhanced_ref) < 1e-15):
+        raise RuntimeError("Singular enhanced THRU reference")
+
+    s21 = dut_t / enhanced_ref
     return s11, s21
 
 
@@ -361,15 +415,17 @@ def save_cal(path, f, arr, start, stop, points, info):
         etrack=arr[2],
         leak0=arr[3],
         leak_r=arr[4],
-        thru21=arr[5],
+        thru11=arr[5],
+        thru21=arr[6],
     )
 
     # The JSON file is deliberately redundant: it is intended for a person to
     # inspect and records which sweep/grid/device the coefficient file belongs
     # to.
     meta = {
-        "format": "unun-vna-saa2-tr-solt",
+        "format": "unun-vna-saa2-enhanced-response",
         "version": 1,
+        "algorithm": "nanovna-v2-enhanced-response",
         "start_hz": start,
         "stop_hz": stop,
         "points": points,
@@ -383,20 +439,24 @@ def save_cal(path, f, arr, start, stop, points, info):
 
 
 def load_cal(path):
-    """Load the arrays required by :func:`apply_cal`."""
+    """Load the enhanced-response calibration arrays used by ``apply_cal``."""
     z = np.load(path)
-    return {
-        k: z[k]
-        for k in (
-            "frequency_hz",
-            "e00",
-            "e11",
-            "etrack",
-            "leak0",
-            "leak_r",
-            "thru21",
+    required = (
+        "frequency_hz",
+        "e00",
+        "e11",
+        "etrack",
+        "leak0",
+        "leak_r",
+        "thru11",
+        "thru21",
+    )
+    missing = [k for k in required if k not in z.files]
+    if missing:
+        raise RuntimeError(
+            "Calibration file is incomplete; missing: " + ", ".join(missing)
         )
-    }
+    return {k: z[k] for k in required}
 
 
 def same_grid(a, b):
@@ -428,6 +488,7 @@ def acquire_calibrated(v, cal_path):
         cal["etrack"],
         cal["leak0"],
         cal["leak_r"],
+        cal["thru11"],
         cal["thru21"],
     )
     return f, s11, s21
@@ -508,11 +569,12 @@ def cmd_cal(a):
             f"\nS-A-A-2 T/R SOLT: "
             f"{a.start/1e6:g}..{a.stop/1e6:g} MHz, {a.points} points"
         )
-        print("No separate ISOLATION standard is used.")
+        print("Enhanced-response T/R calibration; no separate ISOLATION standard is used.")
+        print("SHORT and OPEN S21 are used to derive the leakage model.")
 
         # Only Port 1 needs the three reflection standards because the S-A-A-2
         # does not perform a reverse/full-2-port calibration.
-        fs, short11, _ = capture(
+        fs, short11, short21 = capture(
             v,
             "1/4 SHORT — Port 1",
             "Connect SHORT at the Port-1 calibration plane.",
@@ -528,7 +590,7 @@ def cmd_cal(a):
             a.stop,
             a.points,
         )
-        fl, load11, load21 = capture(
+        fl, load11, _ = capture(
             v,
             "3/4 LOAD — Port 1",
             "Connect 50-ohm LOAD at the Port-1 calibration plane.",
@@ -537,9 +599,10 @@ def cmd_cal(a):
             a.points,
         )
 
-        # THRU captures the complete forward path, including the fixed Port-2
-        # attenuator if one is part of the measurement setup.
-        ft, _, thru21 = capture(
+        # THRU captures both reflection and transmission of the complete
+        # forward path, including the fixed Port-2 attenuator if present.  THRU
+        # S11 is required by the enhanced-response source-match correction.
+        ft, thru11, thru21 = capture(
             v,
             "4/4 THRU",
             "Connect Port 1 and Port 2 calibration planes directly.",
@@ -557,7 +620,13 @@ def cmd_cal(a):
                 )
 
         arr = compute_cal(
-            short11, open11, load11, open21, load21, thru21
+            short11,
+            short21,
+            open11,
+            open21,
+            load11,
+            thru11,
+            thru21,
         )
         p = save_cal(
             a.output, fs, arr, a.start, a.stop, a.points, info
@@ -566,9 +635,9 @@ def cmd_cal(a):
         print(f"Metadata saved:    {p}.json")
 
         # Immediately re-measure the still-connected THRU.  This is a necessary
-        # sanity check of the calibration, although it is not sufficient to
-        # validate Port-2 load match for a strongly reflecting DUT.  The later
-        # 2.4-kohm fixture test provides that more demanding check.
+        # sanity check of the calibration.  A highly reflecting series fixture
+        # is still the more demanding validation because it exercises the
+        # enhanced-response source-match correction and residual Port-2 match.
         f, r11, r21 = sweep_raw(v, a.start, a.stop, a.points)
         c11, c21 = apply_cal(r11, r21, *arr)
         d21 = np.array([db20(x) for x in c21])
@@ -629,6 +698,7 @@ def cmd_sweep(a):
                 cal["etrack"],
                 cal["leak0"],
                 cal["leak_r"],
+                cal["thru11"],
                 cal["thru21"],
             )
             print(f"Applied S-A-A-2 T/R SOLT calibration: {a.cal}")
@@ -699,9 +769,9 @@ def cmd_measure(a):
 def cmd_fixture(a):
     """Measure and validate an arbitrary series-load fixture.
 
-    This step is deliberately separate from DUT measurement.  The fixture is
-    No nominal resistance is assumed; its complex series impedance
-    is extracted from calibrated S11/S21 at every frequency.
+    This step is deliberately separate from DUT measurement.  No nominal
+    resistance is assumed; the fixture's complex series impedance is extracted
+    from calibrated S11/S21 at every frequency.
 
     The two independent extraction formulae and the identity S11+S21=1 are used
     as diagnostics.  If those checks fail badly, the fixture cannot safely be
@@ -788,8 +858,8 @@ def cmd_fixture(a):
                 )
 
         # Summarize how closely the physical PCB behaves like the intended
-        # single series element.  Small values are much more important than an
-        # any nominal resistance.
+        # single series element.  Small residuals are more important here than
+        # agreement with any nominal resistance.
         ident = np.abs(model["identity_error"])
         disagreement = np.abs(
             model["z_from_ratio"] - model["z_from_s21"]
@@ -828,10 +898,14 @@ def cmd_fixture(a):
         print("  NOTE: target values are diagnostics only; measured Zs is authoritative.")
 
         for target in parse_freq_list(a.bands):
+            v11 = interp_complex(f, s11, target)
+            v21 = interp_complex(f, s21, target)
             zz = interp_complex(f, z, target)
             ident_t = interp_real(f, ident, target)
             print(
                 f"  {target/1e6:6.3f} MHz: "
+                f"S11={db20(v11):+.3f} dB, "
+                f"S21={db20(v21):+.3f} dB, "
                 f"Zs={zz.real:.2f}{zz.imag:+.2f}j ohm, "
                 f"series-error={ident_t:.4g}"
             )
@@ -868,15 +942,9 @@ def cmd_analyze(a):
             "DUT and fixture must use the same calibrated frequency grid"
         )
 
-    # Modern fixture files contain the extracted impedance directly.  The
-    # fallback keeps compatibility with older files that stored only S11/S21.
-    if "z_series" in fixture:
-        z_series = fixture["z_series"]
-    else:
-        model = series_fixture_impedance(
-            fixture["s11"], fixture["s21"], a.z0
-        )
-        z_series = model["z_series"]
+    # The fixture command stores the extracted complex series impedance
+    # explicitly; analysis consumes exactly that measured model.
+    z_series = fixture["z_series"]
 
     # The actual power calculation is kept in analysis.py so it can be tested
     # independently of CLI/file I/O.

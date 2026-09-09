@@ -1,4 +1,4 @@
-# unun-vna 0.5.1
+# unun-vna 0.6.0
 
 `unun-vna` is a command-line tool for measuring the **small-signal efficiency**
 of HF UnUn transformers with an S-A-A-2 / NanoVNA V2 using the
@@ -288,7 +288,94 @@ for the selected ratio.
 
 ---
 
-## 7. S-A-A-2 Port-2 load-match limitation
+## 7. S-A-A-2 enhanced-response calibration
+
+The host-side S21 calibration follows the NanoVNA V2 **enhanced-response**
+user-calibration algorithm used for the on-screen traces. This is important for
+the one-transformer method because the series-load fixture is normally highly
+reflective.
+
+### 7.1 Reflection calibration
+
+Port-1 S11 uses the normal three-term SOL error model
+
+\[
+m=e_{00}+\frac{e_t\Gamma}{1-e_{11}\Gamma},
+\]
+
+where \(e_{00}\) is directivity, \(e_t\) is reflection tracking and \(e_{11}\)
+is source match. SHORT, OPEN and LOAD determine these terms.
+
+### 7.2 Transmission leakage
+
+The NanoVNA V2 firmware models residual forward leakage as an affine function
+of the raw reflection measurement:
+
+\[
+L(m_{11})=L_0+L_r m_{11}.
+\]
+
+The two leakage states are taken from **SHORT and OPEN S21**. Both standards
+ideally have zero true transmission, so their measured S21 is treated as
+feed-through/leakage.
+
+
+### 7.3 THRU reflection is part of the calibration
+
+The THRU capture now stores both raw S11 and raw S21. DUT and THRU leakage are
+corrected with their own reflection states:
+
+\[
+T_\mathrm{DUT}=m_{21,\mathrm{DUT}}-L(m_{11,\mathrm{DUT}}),
+\]
+
+\[
+T_\mathrm{THRU}=m_{21,\mathrm{THRU}}-L(m_{11,\mathrm{THRU}}).
+\]
+
+The THRU is therefore not assumed to have exactly zero reflection.
+
+### 7.4 Source-match loop-gain correction
+
+After SOL calibration, the NanoVNA V2 enhanced-response algorithm calculates
+
+\[
+G(\Gamma)=\frac{1}{1-e_{11}\Gamma}.
+\]
+
+For the DUT and THRU this gives
+
+\[
+G_\mathrm{DUT}=\frac{1}{1-e_{11}S_{11,\mathrm{DUT}}},
+\]
+
+\[
+G_\mathrm{THRU}=\frac{1}{1-e_{11}S_{11,\mathrm{THRU}}}.
+\]
+
+The calibrated forward transmission is then
+
+\[
+\boxed{
+S_{21}=\frac{T_\mathrm{DUT}}
+{T_\mathrm{THRU}\,G_\mathrm{DUT}/G_\mathrm{THRU}}
+}
+\]
+
+or equivalently
+
+\[
+S_{21}=\frac{T_\mathrm{DUT}}{T_\mathrm{THRU}}
+\frac{1-e_{11}S_{11,\mathrm{DUT}}}
+     {1-e_{11}S_{11,\mathrm{THRU}}}.
+\]
+
+For a well-matched DUT this correction is small. For a fixture with
+\(|S_{11}|\) close to one it can be large enough to matter by more than a dB.
+
+---
+
+## 8. S-A-A-2 Port-2 load-match limitation
 
 The S-A-A-2 is a T/R VNA, not a full bidirectional two-port VNA.
 
@@ -321,7 +408,7 @@ roughly 20 dB.
 
 ---
 
-## 8. Calibration
+## 9. Calibration
 
 ```bash
 unun-vna calibrate \
@@ -333,10 +420,13 @@ unun-vna calibrate \
 
 The program requests:
 
-1. SHORT on Port 1;
-2. OPEN on Port 1;
-3. 50 Ω LOAD on Port 1;
-4. THRU between the calibration planes.
+1. SHORT on Port 1 - both S11 and S21 are retained;
+2. OPEN on Port 1 - both S11 and S21 are retained;
+3. 50 Ω LOAD on Port 1 - used for the SOL reflection model;
+4. THRU between the calibration planes - both S11 and S21 are retained.
+
+SHORT/OPEN S21 define the leakage model. THRU S11 is required for the
+source-match enhanced-response correction.
 
 Files:
 
@@ -348,7 +438,7 @@ hf35-pad.npz.through.csv
 
 ---
 
-## 9. Characterize a fixture
+## 10. Characterize a fixture
 
 The fixture extraction itself is independent of ratio.
 
@@ -374,7 +464,7 @@ unun-vna fixture \
 
 ---
 
-## 10. Measure a transformer
+## 11. Measure a transformer
 
 Measurement acquisition itself requires no ratio:
 
@@ -392,7 +482,7 @@ Port 1 ---- transformer ---- characterized fixture ---- Port 2 pad ---- Port 2
 
 ---
 
-## 11. Analyze
+## 12. Analyze
 
 Default 1:49:
 
@@ -435,7 +525,7 @@ unun-vna analyze \
 
 ---
 
-## 12. Analysis CSV
+## 13. Analysis CSV
 
 The analysis CSV contains:
 
@@ -465,7 +555,7 @@ The actual efficiency columns do not.
 
 ---
 
-## 13. Ideal sanity checks
+## 14. Ideal sanity checks
 
 ### 1:9
 
@@ -531,7 +621,7 @@ S_{21}\approx-18.06\ \text{dB}.
 
 ---
 
-## 14. Remaining assumptions
+## 15. Remaining assumptions
 
 The tool does **not** assume:
 
@@ -554,7 +644,7 @@ full bidirectional VNA.
 
 ---
 
-## 15. Full workflow example
+## 16. Full workflow example
 
 ```bash
 pipx install --editable . --force
@@ -585,7 +675,7 @@ unun-vna analyze \
 
 ---
 
-## 16. Source structure
+## 17. Source structure
 
 ```text
 unun-vna/

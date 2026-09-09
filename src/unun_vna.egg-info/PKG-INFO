@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: unun-vna
-Version: 0.5.0
+Version: 0.6.0
 Summary: S-A-A-2/NanoVNA V2 helper for UnUn efficiency measurements
 Requires-Python: >=3.10
 Requires-Dist: numpy>=1.24

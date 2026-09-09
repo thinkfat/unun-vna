@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unun-vna"
-version = "0.5.1"
+version = "0.6.0"
 description = "S-A-A-2/NanoVNA V2 helper for UnUn efficiency measurements"
 requires-python = ">=3.10"
 dependencies = [
