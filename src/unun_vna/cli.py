@@ -57,6 +57,7 @@ from .analysis import (
     unun_efficiency,
     vswr_from_s11,
 )
+from .plotting import plot_analysis_files
 
 
 # Default sweep chosen to cover the HF amateur bands of interest while leaving
@@ -1065,6 +1066,34 @@ def cmd_analyze(a):
             "that is not adequately represented by the series model.",
             file=sys.stderr,
         )
+
+    # Optional convenience plot.  The plotter reads the just-written analysis
+    # CSV rather than duplicating any RF calculations in the visualization
+    # path.  The standalone ``plot`` command uses exactly the same function.
+    if a.plot is not None:
+        plot_path = plot_analysis_files(
+            [out],
+            a.plot,
+            labels=[a.plot_label] if a.plot_label else None,
+            title=a.plot_title or "UnUn performance",
+        )
+        print(f"Plot:         {plot_path}")
+    return 0
+
+
+def cmd_plot(a):
+    """Plot one or more ``analyze`` CSV files as VSWR and efficiency curves."""
+    out = plot_analysis_files(
+        a.inputs,
+        a.output,
+        labels=a.labels,
+        title=a.title,
+        show_bands=not a.no_bands,
+        vswr_max=a.vswr_max,
+        efficiency_min=a.efficiency_min,
+        dpi=a.dpi,
+    )
+    print(f"Plot written to: {out}")
     return 0
 
 
@@ -1154,6 +1183,70 @@ def make_parser():
     )
     q.add_argument("--bands", default=DEFAULT_BANDS)
     q.add_argument("-o", "--output", default="unun-efficiency.csv")
+    q.add_argument(
+        "--plot",
+        type=Path,
+        help="also create a VSWR/efficiency plot (.png, .svg or .pdf)",
+    )
+    q.add_argument(
+        "--plot-label",
+        help="legend label used by --plot (default: analysis CSV filename)",
+    )
+    q.add_argument(
+        "--plot-title",
+        help="title used by --plot (default: 'UnUn performance')",
+    )
+
+    q = s.add_parser(
+        "plot",
+        help="Plot VSWR and efficiency from one or more analyze CSV files",
+    )
+    q.add_argument(
+        "inputs",
+        nargs="+",
+        type=Path,
+        help="analysis CSV file(s) produced by 'unun-vna analyze'",
+    )
+    q.add_argument(
+        "--label",
+        dest="labels",
+        action="append",
+        help="legend label; repeat once per input CSV",
+    )
+    q.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("unun-plot.png"),
+        help="output plot (.png, .svg or .pdf; default: unun-plot.png)",
+    )
+    q.add_argument(
+        "--title",
+        default="UnUn performance",
+        help="plot title",
+    )
+    q.add_argument(
+        "--no-bands",
+        action="store_true",
+        help="do not shade the IARU Region-1 40/20/15/10 m allocations",
+    )
+    q.add_argument(
+        "--vswr-max",
+        type=float,
+        default=3.0,
+        help="upper VSWR display limit (default: 3.0)",
+    )
+    q.add_argument(
+        "--efficiency-min",
+        type=float,
+        help="lower efficiency-axis limit in percent (default: automatic)",
+    )
+    q.add_argument(
+        "--dpi",
+        type=int,
+        default=160,
+        help="PNG resolution (default: 160 dpi)",
+    )
 
     return p
 
@@ -1174,6 +1267,8 @@ def main():
             return cmd_measure(a)
         if a.cmd == "analyze":
             return cmd_analyze(a)
+        if a.cmd == "plot":
+            return cmd_plot(a)
     except KeyboardInterrupt:
         print("\nInterrupted.", file=sys.stderr)
         return 130

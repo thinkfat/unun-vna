@@ -3,6 +3,7 @@ pyproject.toml
 src/unun_vna/__init__.py
 src/unun_vna/analysis.py
 src/unun_vna/cli.py
+src/unun_vna/plotting.py
 src/unun_vna.egg-info/PKG-INFO
 src/unun_vna.egg-info/SOURCES.txt
 src/unun_vna.egg-info/dependency_links.txt
@@ -11,3 +12,4 @@ src/unun_vna.egg-info/requires.txt
 src/unun_vna.egg-info/top_level.txt
 tests/test_calibration.py
 tests/test_math.py
+tests/test_plotting.py
