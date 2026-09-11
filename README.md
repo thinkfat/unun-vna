@@ -1,8 +1,12 @@
-# unun-vna 0.7.1
+# unun-vna 0.7.2
 
 `unun-vna` is a command-line tool for measuring the **small-signal efficiency**
 of HF UnUn transformers with an S-A-A-2 / NanoVNA V2 using the
 **one-transformer method**.
+
+> **Markdown note:** display equations intentionally use GitHub's fenced
+> `math` blocks. This avoids ambiguity between LaTeX delimiters and GitHub
+> Flavored Markdown while still rendering through GitHub MathJax.
 
 The tool is generalized:
 
@@ -24,9 +28,9 @@ higher-impedance side is connected to the series fixture and then Port 2.
 
 `--ratio` means the **impedance** ratio
 
-$$
-N = \frac{Z_\text{high}}{Z_\text{low}}.
-$$
+```math
+N = \frac{Z_\mathrm{high}}{Z_\mathrm{low}}.
+```
 
 These are equivalent:
 
@@ -69,9 +73,9 @@ transformer ratio and it is not assumed to equal its nominal/DC value.
 
 It is measured as
 
-$$
+```math
 Z_s(f)=R_s(f)+jX_s(f).
-$$
+```
 
 ---
 
@@ -80,16 +84,16 @@ $$
 For an ideal transformer with ratio `N`, the target total high-side resistance
 for a perfect resistive match is
 
-$$
-R_{\text{high,target}} = N Z_0.
-$$
+```math
+R_{\mathrm{high,target}} = N Z_0.
+```
 
 Port 2 itself contributes `Z0`, so the ideal purely resistive series fixture
 would be
 
-$$
-R_{\text{series,target}} = (N-1)Z_0.
-$$
+```math
+R_{\mathrm{series,target}} = (N-1)Z_0.
+```
 
 At `Z0=50 Ω`:
 
@@ -111,31 +115,31 @@ measured fixture impedance.
 
 For a pure series impedance between two equal `Z0` ports:
 
-$$
+```math
 S_{11}=\frac{Z_s}{2Z_0+Z_s}
-$$
+```
 
-$$
+```math
 S_{21}=\frac{2Z_0}{2Z_0+Z_s}.
-$$
+```
 
 Therefore:
 
-$$
+```math
 Z_{s,1}=2Z_0\frac{S_{11}}{S_{21}}
-$$
+```
 
 and
 
-$$
+```math
 Z_{s,2}=2Z_0\left(\frac{1}{S_{21}}-1\right).
-$$
+```
 
 A pure series element also satisfies
 
-$$
+```math
 S_{11}+S_{21}=1.
-$$
+```
 
 The `fixture` command reports both impedance estimates, their disagreement, and
 `|S11+S21-1|`.
@@ -149,9 +153,9 @@ complex series impedance.
 
 By S-parameter definition,
 
-$$
+```math
 |S_{21}|^2
-$$
+```
 
 is the incident Port-1 power fraction delivered to the matched Port-2
 termination `Z0`.
@@ -159,24 +163,24 @@ termination `Z0`.
 The same current flows through the Port-2 resistance and the series fixture.
 Thus total real high-side load power is
 
-$$
-\frac{P_\text{high}}{P_\text{incident}}
+```math
+\frac{P_\mathrm{high}}{P_\mathrm{incident}}
 =
 |S_{21}|^2
 \left(1+\frac{\Re\{Z_s\}}{Z_0}\right).
-$$
+```
 
 Power accepted at Port 1 is
 
-$$
-\frac{P_\text{accepted}}{P_\text{incident}}
+```math
+\frac{P_\mathrm{accepted}}{P_\mathrm{incident}}
 =
 1-|S_{11}|^2.
-$$
+```
 
 Therefore
 
-$$
+```math
 \boxed{
 \eta=
 \frac{
@@ -186,28 +190,28 @@ $$
 1-|S_{11}|^2
 }
 }
-$$
+```
 
 and
 
-$$
-L_\text{dB}=-10\log_{10}(\eta).
-$$
+```math
+L_\mathrm{dB}=-10\log_{10}(\eta).
+```
 
 ### VSWR
 
 The analysis also reports Port-1 VSWR derived directly from calibrated S11.
 With
 
-$$
+```math
 \rho = |S_{11}|,
-$$
+```
 
-$$
+```math
 \boxed{
 \mathrm{VSWR}=\frac{1+\rho}{1-\rho}
 }
-$$
+```
 
 for $\rho<1$.
 
@@ -234,53 +238,53 @@ the actual measured fixture.
 
 The real measured high-side load is
 
-$$
-Z_\text{load}=Z_s+Z_0.
-$$
+```math
+Z_\mathrm{load}=Z_s+Z_0.
+```
 
 An ideal lossless transformer with impedance ratio `N` reflects that to Port 1
 as
 
-$$
-Z_\text{in}=\frac{Z_\text{load}}{N}.
-$$
+```math
+Z_\mathrm{in}=\frac{Z_\mathrm{load}}{N}.
+```
 
 The input reflection expected from load mismatch alone is
 
-$$
-\Gamma_\text{ideal}
+```math
+\Gamma_\mathrm{ideal}
 =
-\frac{Z_\text{in}-Z_0}
-     {Z_\text{in}+Z_0}.
-$$
+\frac{Z_\mathrm{in}-Z_0}
+     {Z_\mathrm{in}+Z_0}.
+```
 
 Therefore
 
-$$
-|S_{11,\text{ideal}}|=|\Gamma_\text{ideal}|.
-$$
+```math
+|S_{11,\mathrm{ideal}}|=|\Gamma_\mathrm{ideal}|.
+```
 
 The accepted incident power of that ideal network is
 
-$$
-1-|\Gamma_\text{ideal}|^2.
-$$
+```math
+1-|\Gamma_\mathrm{ideal}|^2.
+```
 
 Since an ideal transformer is lossless, the fraction of that real power
 dissipated in Port 2 is
 
-$$
+```math
 \frac{Z_0}{Z_0+\Re\{Z_s\}}.
-$$
+```
 
 Hence
 
-$$
-|S_{21,\text{ideal}}|^2
+```math
+|S_{21,\mathrm{ideal}}|^2
 =
-\left(1-|\Gamma_\text{ideal}|^2\right)
+\left(1-|\Gamma_\mathrm{ideal}|^2\right)
 \frac{Z_0}{Z_0+\Re\{Z_s\}}.
-$$
+```
 
 The analysis output shows measured S11/S21 beside these ideal values.
 
@@ -300,9 +304,9 @@ reflective.
 
 Port-1 S11 uses the normal three-term SOL error model
 
-$$
+```math
 m=e_{00}+\frac{e_t\Gamma}{1-e_{11}\Gamma},
-$$
+```
 
 where $e_{00}$ is directivity, $e_t$ is reflection tracking and $e_{11}$
 is source match. SHORT, OPEN and LOAD determine these terms.
@@ -312,9 +316,9 @@ is source match. SHORT, OPEN and LOAD determine these terms.
 The NanoVNA V2 firmware models residual forward leakage as an affine function
 of the raw reflection measurement:
 
-$$
+```math
 L(m_{11})=L_0+L_r m_{11}.
-$$
+```
 
 The two leakage states are taken from **SHORT and OPEN S21**. Both standards
 ideally have zero true transmission, so their measured S21 is treated as
@@ -326,50 +330,55 @@ feed-through/leakage.
 The THRU capture now stores both raw S11 and raw S21. DUT and THRU leakage are
 corrected with their own reflection states:
 
-$$
+```math
 T_\mathrm{DUT}=m_{21,\mathrm{DUT}}-L(m_{11,\mathrm{DUT}}),
-$$
+```
 
-$$
+```math
 T_\mathrm{THRU}=m_{21,\mathrm{THRU}}-L(m_{11,\mathrm{THRU}}).
-$$
+```
 
 The THRU is therefore not assumed to have exactly zero reflection.
 
 ### 7.4 Source-match loop-gain correction
 
-After SOL calibration, the NanoVNA V2 enhanced-response algorithm calculates
+After SOL calibration, let $\Gamma$ denote the calibrated Port-1 reflection
+coefficient. The NanoVNA V2 enhanced-response algorithm uses the source-match
+loop-gain factor
 
-$$
+```math
 G(\Gamma)=\frac{1}{1-e_{11}\Gamma}.
-$$
+```
 
-For the DUT and THRU this gives
+For the DUT and for the THRU reference, respectively,
 
-$$
+```math
 G_\mathrm{DUT}=\frac{1}{1-e_{11}S_{11,\mathrm{DUT}}},
-$$
+```
 
-$$
+```math
 G_\mathrm{THRU}=\frac{1}{1-e_{11}S_{11,\mathrm{THRU}}}.
-$$
+```
 
-The calibrated forward transmission is then
+The firmware scales the leakage-corrected THRU reference by
+$G_\mathrm{DUT}/G_\mathrm{THRU}$ before normalizing the DUT transmission.
+Writing that operation explicitly gives
 
-$$
-\boxed{
-S_{21}=\frac{T_\mathrm{DUT}}
-{T_\mathrm{THRU}\,G_\mathrm{DUT}/G_\mathrm{THRU}}
-}
-$$
-
-or equivalently
-
-$$
+```math
 S_{21}=\frac{T_\mathrm{DUT}}{T_\mathrm{THRU}}
-\frac{1-e_{11}S_{11,\mathrm{DUT}}}
-     {1-e_{11}S_{11,\mathrm{THRU}}}.
-$$
+       \frac{G_\mathrm{THRU}}{G_\mathrm{DUT}}.
+```
+
+Substituting the definition of $G$ yields the equivalent form used by the host
+implementation:
+
+```math
+\boxed{
+S_{21}=\frac{T_\mathrm{DUT}}{T_\mathrm{THRU}}
+       \frac{1-e_{11}S_{11,\mathrm{DUT}}}
+              {1-e_{11}S_{11,\mathrm{THRU}}}
+}
+```
 
 For a well-matched DUT this correction is small. For a fixture with
 $|S_{11}|$ close to one it can be large enough to matter by more than a dB.
@@ -646,33 +655,33 @@ measured efficiency result.
 
 At `Z0=50 Ω`, use an ideal 400 Ω series fixture:
 
-$$
+```math
 400+50=450\ \Omega
-$$
+```
 
 and
 
-$$
+```math
 450/9=50\ \Omega.
-$$
+```
 
 Thus an ideal transformer has
 
-$$
+```math
 S_{11}=0
-$$
+```
 
 and
 
-$$
+```math
 |S_{21}|=1/3
-$$
+```
 
 or approximately
 
-$$
-S_{21}=-9.54\ \text{dB}.
-$$
+```math
+S_{21,\mathrm{dB}}=20\log_{10}|S_{21}|=-9.54\ \mathrm{dB}.
+```
 
 Efficiency evaluates to 100%.
 
@@ -680,29 +689,29 @@ Efficiency evaluates to 100%.
 
 With 2400 Ω series:
 
-$$
+```math
 |S_{21}|=1/7
-$$
+```
 
 or
 
-$$
-S_{21}\approx-16.90\ \text{dB}.
-$$
+```math
+S_{21,\mathrm{dB}}=20\log_{10}|S_{21}|\approx-16.90\ \mathrm{dB}.
+```
 
 ### 1:64
 
 With 3150 Ω series:
 
-$$
+```math
 |S_{21}|=1/8
-$$
+```
 
 or
 
-$$
-S_{21}\approx-18.06\ \text{dB}.
-$$
+```math
+S_{21,\mathrm{dB}}=20\log_{10}|S_{21}|\approx-18.06\ \mathrm{dB}.
+```
 
 ---
 
